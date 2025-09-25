@@ -1,0 +1,19 @@
+{
+	"version": "2.0.0",
+	"tasks": [
+		{
+			"label": "Build OpenAPI Generator",
+			"type": "shell",
+			"command": "dart",
+			"args": [
+				"compile",
+				"exe",
+				"bin/dart_openapi_generator.dart",
+				"-o",
+				"build/dart_openapi_generator"
+			],
+			"problemMatcher": [],
+			"group": "build"
+		}
+	]
+}
