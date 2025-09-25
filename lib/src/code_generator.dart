@@ -32,14 +32,31 @@ class CodeGenerator {
       final sanitizedClassName = _sanitizeClassName(className);
       
       try {
+        // Additional validation before generation
+        if (sanitizedClassName.isEmpty || sanitizedClassName == 'InvalidType') {
+          print('Skipping schema with invalid sanitized name: $className -> $sanitizedClassName');
+          continue;
+        }
+        
         if (schema.isEnum) {
+          // Validate enum has values before generating
+          if (schema.enumValues.isEmpty) {
+            print('Skipping enum $className with no values');
+            continue;
+          }
           await _generateEnumFile(sanitizedClassName, schema);
         } else {
+          // Validate object schema before generating
+          if (schema.type == 'object' && (schema.properties == null || schema.properties!.isEmpty)) {
+            print('Warning: Generating empty class for $className');
+          }
           await _generateModelFile(sanitizedClassName, schema);
         }
         validClassNames.add(sanitizedClassName);
-      } catch (e) {
+        print('Successfully generated: $sanitizedClassName');
+      } catch (e, stackTrace) {
         print('Error generating $className: $e');
+        print('Stack trace: $stackTrace');
         continue;
       }
     }
@@ -103,17 +120,29 @@ class CodeGenerator {
     buffer.writeln('enum $enumName {');
     
     final enumValues = schema.enumValues;
-    for (int i = 0; i < enumValues.length; i++) {
-      final value = enumValues[i];
-      final enumValueName = _sanitizeEnumValue(value);
-      
-      buffer.write('  @JsonValue(\'$value\')');
-      buffer.write(' $enumValueName');
-      
-      if (i < enumValues.length - 1) {
-        buffer.writeln(',');
-      } else {
-        buffer.writeln('');
+    
+    // Validate that we have enum values
+    if (enumValues.isEmpty) {
+      print('Warning: Enum $enumName has no values, adding default');
+      buffer.writeln('  @JsonValue(\'unknown\') unknown');
+    } else {
+      for (int i = 0; i < enumValues.length; i++) {
+        final value = enumValues[i];
+        final enumValueName = _sanitizeEnumValue(value);
+        
+        // Skip empty or invalid enum values
+        if (enumValueName.isEmpty || enumValueName == 'unknown') {
+          continue;
+        }
+        
+        buffer.write('  @JsonValue(\'$value\')');
+        buffer.write(' $enumValueName');
+        
+        if (i < enumValues.length - 1) {
+          buffer.writeln(',');
+        } else {
+          buffer.writeln('');
+        }
       }
     }
     
@@ -177,8 +206,12 @@ class CodeGenerator {
         
         final dartType = propertySchema.getDartType();
         
-        // Skip properties with invalid types
-        if (dartType.contains('InvalidType') || dartType.isEmpty) {
+        // Skip properties with invalid types or problematic references
+        if (dartType.contains('InvalidType') || 
+            dartType.isEmpty || 
+            dartType.contains('ComponentRef') ||
+            dartType.contains('app__modules__') ||
+            !_isValidDartType(dartType)) {
           print('  Skipping property with invalid type: $propertyName ($dartType)');
           continue;
         }
@@ -319,5 +352,23 @@ class CodeGenerator {
       'var', 'void', 'while', 'with', 'yield'
     };
     return keywords.contains(name.toLowerCase());
+  }
+
+  /// Check if a type name is valid for Dart
+  bool _isValidDartType(String type) {
+    // Remove generic type parameters for validation
+    final baseType = type.replaceAll(RegExp(r'<.*>'), '');
+    
+    // Check for known invalid patterns
+    if (baseType.contains('InvalidType') ||
+        baseType.contains('ComponentRef') ||
+        baseType.contains('__') ||
+        baseType.length > 50) {
+      return false;
+    }
+    
+    // Check if it's a valid Dart identifier
+    return RegExp(r'^[a-zA-Z][a-zA-Z0-9_]*$').hasMatch(baseType) ||
+           ['String', 'int', 'double', 'bool', 'dynamic', 'List', 'Map'].contains(baseType);
   }
 }

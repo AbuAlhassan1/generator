@@ -71,10 +71,19 @@ class Schema {
     if (ref != null) {
       // Extract class name from reference like "#/components/schemas/User"
       final parts = ref!.split('/');
+      if (parts.isEmpty) {
+        print('Empty ref parts for: $ref');
+        return 'dynamic';
+      }
+      
       final typeName = _sanitizeClassName(parts.last);
       
       // Check if this would create an invalid type name
-      if (typeName.isEmpty || typeName == 'InvalidType') {
+      if (typeName.isEmpty || 
+          typeName == 'InvalidType' || 
+          typeName.contains('__') ||
+          typeName.length > 50) {
+        print('Invalid type name generated: $typeName from ref: $ref');
         return 'dynamic';
       }
       
@@ -177,8 +186,30 @@ class Schema {
     if (ref != null) {
       final parts = ref!.split('/');
       final className = parts.last;
-      return _isValidClassName(className);
+      if (!_isValidClassName(className)) {
+        print('Invalid class name from ref: $className');
+        return false;
+      }
     }
+
+    // Skip schemas without proper structure
+    if (type == null && properties == null && enum_ == null && ref == null) {
+      print('Schema has no type, properties, enum, or ref');
+      return false;
+    }
+
+    // Skip schemas with problematic patterns
+    if (ref != null && (ref!.contains('__') || ref!.length > 100)) {
+      print('Problematic ref pattern: $ref');
+      return false;
+    }
+
+    // Skip empty enums
+    if (isEnum && enumValues.isEmpty) {
+      print('Enum schema has no values');
+      return false;
+    }
+
     return true;
   }
 
