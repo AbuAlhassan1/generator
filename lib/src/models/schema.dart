@@ -71,7 +71,14 @@ class Schema {
     if (ref != null) {
       // Extract class name from reference like "#/components/schemas/User"
       final parts = ref!.split('/');
-      return _sanitizeClassName(parts.last);
+      final typeName = _sanitizeClassName(parts.last);
+      
+      // Check if this would create an invalid type name
+      if (typeName.isEmpty || typeName == 'InvalidType') {
+        return 'dynamic';
+      }
+      
+      return typeName;
     }
 
     // Handle enums
@@ -91,18 +98,35 @@ class Schema {
         return 'bool';
       case 'array':
         if (items != null) {
-          return 'List<${items!.getDartType()}>';
+          final itemType = items!.getDartType();
+          // Avoid nested InvalidType
+          if (itemType.contains('InvalidType') || itemType.isEmpty) {
+            return 'List<dynamic>';
+          }
+          return 'List<$itemType>';
         }
         return 'List<dynamic>';
       case 'object':
         return 'Map<String, dynamic>';
       default:
+        // Handle null or unknown types
+        if (type == null || type?.trim().isEmpty == true) {
+          return 'dynamic';
+        }
+        // Fallback for any unhandled type
         return 'dynamic';
     }
   }
 
   /// Sanitize class name to be valid Dart identifier
   String _sanitizeClassName(String name) {
+    // Handle very long complex names by shortening them
+    if (name.length > 100) {
+      // Take last meaningful part after double underscore
+      final parts = name.split('__');
+      name = parts.isNotEmpty ? parts.last : name.substring(name.length - 50);
+    }
+    
     // Remove invalid characters and ensure it starts with a letter
     String sanitized = name.replaceAll(RegExp(r'[^a-zA-Z0-9_]'), '');
     

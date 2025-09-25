@@ -91,6 +91,10 @@ class CodeGenerator {
   String _generateEnumClass(String enumName, Schema schema) {
     final buffer = StringBuffer();
     
+    // Import statements
+    buffer.writeln("import 'package:json_annotation/json_annotation.dart';");
+    buffer.writeln();
+    
     // Add documentation if available
     if (schema.description != null) {
       buffer.writeln('/// ${schema.description}');
@@ -172,6 +176,13 @@ class CodeGenerator {
         }
         
         final dartType = propertySchema.getDartType();
+        
+        // Skip properties with invalid types
+        if (dartType.contains('InvalidType') || dartType.isEmpty) {
+          print('  Skipping property with invalid type: $propertyName ($dartType)');
+          continue;
+        }
+        
         final nullableType = isRequired ? dartType : '$dartType?';
         
         // Add property documentation if available
@@ -203,6 +214,12 @@ class CodeGenerator {
         
         // Skip invalid properties
         if (!_isValidPropertyName(propertyName)) {
+          continue;
+        }
+        
+        // Skip properties with invalid types
+        final dartType = entry.value.getDartType();
+        if (dartType.contains('InvalidType') || dartType.isEmpty) {
           continue;
         }
         
